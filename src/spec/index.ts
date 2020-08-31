@@ -12,7 +12,7 @@ import {
 } from '@angular-devkit/schematics';
 import { EOL } from 'os';
 import { Change, InsertChange, RemoveChange } from '../../lib/utility/change';
-import { readClassNamesAndConstructorParams } from './read/read';
+import { describeSource, isClassDescription, ClassDescription } from './read/read';
 import { addMissing, update as doUpdate } from './update/update';
 
 class SpecOptions {
@@ -72,7 +72,7 @@ function updateExistingSpec(fullName: string, tree: Tree, logger: Logger) {
         } else {
             const specFilePath = existingSpecFile.path;
             // if a spec exists we'll try to update it
-            const { params, className, publicMethods } = parseClassUnderTestFile(name, content);
+            const { params, className, publicMethods } = parseSourceFile(name, content);
             logger.debug(`Class name ${className} ${EOL}Constructor(${params}) {${publicMethods}}`);
 
             // start by adding missing things (like the setup function)
@@ -151,7 +151,7 @@ function createNewSpec(name: string, tree: Tree, logger: Logger) {
 
         const path = name.split(fileName)[0]; // split on the filename - so we get only an array of one item
 
-        const { params, className, publicMethods } = parseClassUnderTestFile(name, content);
+        const { params, className, publicMethods } = parseSourceFile(name, content);
 
         // if there are no methods in the class - let's add one test case anyway
         if (Array.isArray(publicMethods) && publicMethods.length === 0) {
@@ -204,14 +204,15 @@ function createNewSpec(name: string, tree: Tree, logger: Logger) {
     }
 }
 
-function parseClassUnderTestFile(name: string, fileContents: Buffer) {
-    const classDescriptions = readClassNamesAndConstructorParams(
-        name,
-        fileContents.toString('utf8')
-    );
+function parseSourceFile(name: string, fileContents: Buffer) {
+    const descriptions = describeSource(name, fileContents.toString('utf8'));
+
+    const classes = descriptions.filter(c => isClassDescription(c)) as ClassDescription[];
+
     // we'll take the first class with any number of constructor params or just the first if there are none
-    const classWithConstructorParamsOrFirst =
-        classDescriptions.filter(c => c.constructorParams.length > 0)[0] || classDescriptions[0];
+    const classWithConstructorParamsOrFirst: ClassDescription =
+        classes.filter((c: ClassDescription) => c.constructorParams.length > 0)[0] ||
+        descriptions[0];
     if (classWithConstructorParamsOrFirst == null) {
         throw new Error('No classes found to be spec-ed!');
     }
